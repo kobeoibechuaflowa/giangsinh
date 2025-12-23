@@ -2,16 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magic Christmas - Final Clean</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Christmas - SAYGEX</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         #canvas-container { width: 100%; height: 100vh; display: block; }
         
         /* UI Center Vandiep */
@@ -26,6 +25,7 @@
             font-size: 13px; 
             margin-bottom: 20px; 
             text-shadow: 0 2px 4px black;
+            padding: 0 10px;
         }
 
         button {
@@ -61,10 +61,62 @@
         }
 
         #error-log { display: none; position: absolute; top: 0; left: 0; color: red; background: rgba(0,0,0,0.8); z-index: 999; padding: 10px; }
+        
+        /* Mobile instruction */
+        #mobile-instruction {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 101;
+            max-width: 200px;
+            display: none;
+        }
+        
+        /* Camera permission alert */
+        #camera-permission {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #FFD700;
+            z-index: 1000;
+            text-align: center;
+            display: none;
+            max-width: 90%;
+        }
+        
+        #camera-permission button {
+            margin-top: 15px;
+            padding: 10px 30px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div id="error-log"></div>
+    
+    <!-- Camera Permission Alert -->
+    <div id="camera-permission">
+        <h3>Camera Access Required</h3>
+        <p>This experience uses your front camera to detect hand gestures.</p>
+        <p>Please allow camera access to continue.</p>
+        <button id="btnGrantPermission" onclick="requestCameraPermission()">ALLOW CAMERA</button>
+        <p style="font-size: 11px; margin-top: 15px; opacity: 0.7;">No images are stored or transmitted.</p>
+    </div>
+    
+    <!-- Mobile Instruction -->
+    <div id="mobile-instruction">
+        📱 Mobile Mode: Show hand to camera. Gestures same as desktop.
+    </div>
     
     <!-- UI Vandiep -->
     <div id="ui-layer">
@@ -84,7 +136,37 @@
 
     <script>
         // ==========================================
-        // 1. RESOURCES CONFIG Vandiep
+        // 1. MOBILE DETECTION & CONFIG
+        // ==========================================
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let isCameraActive = false;
+        
+        if (isMobile) {
+            document.getElementById('mobile-instruction').style.display = 'block';
+            // Adjust particle counts for mobile performance
+            CONFIG = {
+                goldCount: 1200,    // Reduced for mobile
+                redCount: 200,      // Reduced for mobile
+                giftCount: 100,     // Reduced for mobile
+                explodeRadius: 65,  
+                photoOrbitRadius: 25,
+                treeHeight: 70,
+                treeBaseRadius: 35
+            };
+        } else {
+            CONFIG = {
+                goldCount: 2000,
+                redCount: 300,
+                giftCount: 150,
+                explodeRadius: 65,  
+                photoOrbitRadius: 25,
+                treeHeight: 70,
+                treeBaseRadius: 35
+            };
+        }
+
+        // ==========================================
+        // 2. RESOURCES CONFIG Vandiep
         // ==========================================
         const MUSIC_URL = "./audio.mp3";
         let bgMusic = new Audio(MUSIC_URL);
@@ -131,18 +213,8 @@
         };
 
         // ==========================================
-        // 2. SYSTEM CONFIG Vandiep
+        // 3. SYSTEM VARIABLES Vandiep
         // ==========================================
-        const CONFIG = {
-            goldCount: 2000,
-            redCount: 300,
-            giftCount: 150,
-            explodeRadius: 65,  
-            photoOrbitRadius: 25,
-            treeHeight: 70,
-            treeBaseRadius: 35
-        };
-
         let scene, camera, renderer;
         let groupGold, groupRed, groupGift; 
         let photoMeshes = [];    
@@ -151,9 +223,11 @@
         let state = 'TREE'; 
         let selectedIndex = 0;
         let handX = 0.5;
+        let hands = null;
+        let cameraUtils = null;
 
         // ==========================================
-        // 3. THREE.JS SYSTEM Vandiep
+        // 4. THREE.JS SYSTEM Vandiep
         // ==========================================
         function init3D() {
             const container = document.getElementById('canvas-container');
@@ -163,9 +237,20 @@
             camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
             camera.position.z = 100;
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: false,
+                powerPreference: "high-performance"
+            });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            
+            // Optimize for mobile
+            if (isMobile) {
+                renderer.setPixelRatio(1); // Lower pixel ratio for mobile
+            } else {
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            }
+            
             container.appendChild(renderer.domElement);
 
             groupGold = createParticleSystem('gold', CONFIG.goldCount, 2.0);
@@ -322,7 +407,7 @@
             lCtx.font = 'bold 120px "Segoe UI", sans-serif';
             lCtx.fillStyle = '#FF69B4'; lCtx.textAlign = 'center';
             lCtx.shadowColor = "#FF1493"; lCtx.shadowBlur = 40; 
-            lCtx.fillText("I LOVE YOU ❤️", 512, 130);
+            lCtx.fillText("DarknessGod", 512, 130);
             const loveTex = new THREE.CanvasTexture(loveCanvas);
             const loveMat = new THREE.MeshBasicMaterial({ map: loveTex, transparent: true, blending: THREE.AdditiveBlending });
             loveMesh = new THREE.Mesh(new THREE.PlaneGeometry(70, 18), loveMat);
@@ -473,59 +558,198 @@
             renderer.render(scene, camera);
         }
 
-        function startSystem() {
-            document.getElementById('btnStart').style.display = 'none';
-            bgMusic.play().catch(e => console.log(e));
-            init3D();
+        // ==========================================
+        // 5. MOBILE CAMERA & GESTURE HANDLING
+        // ==========================================
+        function requestCameraPermission() {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'user', // Use front camera
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false 
+            }).then(stream => {
+                document.getElementById('camera-permission').style.display = 'none';
+                const video = document.getElementsByClassName('input_video')[0];
+                video.srcObject = stream;
+                video.play();
+                isCameraActive = true;
+                
+                // Start hand tracking after camera is ready
+                setTimeout(() => {
+                    initHandTracking();
+                }, 500);
+                
+            }).catch(err => {
+                console.error("Camera error:", err);
+                alert("Camera access is required for this experience. Please allow camera access.");
+            });
+        }
 
+        function initHandTracking() {
             const video = document.getElementsByClassName('input_video')[0];
             const canvas = document.getElementById('camera-preview');
             const ctx = canvas.getContext('2d');
             
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            
+            // Optimize for mobile
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 0, // Lower complexity for mobile
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+                selfieMode: true // Important for mobile front camera
+            });
 
             hands.onResults(results => {
-                ctx.clearRect(0,0,100,75); ctx.drawImage(results.image, 0, 0, 100, 75);
+                if (!results.image) return;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-                // --- Hand Logic  ---
+                // --- Hand Gesture Logic ---
                 if (results.multiHandLandmarks.length === 2) {
-                    const h1 = results.multiHandLandmarks[0]; const h2 = results.multiHandLandmarks[1];
+                    // Two hands detected - check for heart gesture
+                    const h1 = results.multiHandLandmarks[0];
+                    const h2 = results.multiHandLandmarks[1];
+                    
+                    // Calculate distance between index fingertips
                     const distIndex = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
+                    // Calculate distance between thumb tips
                     const distThumb = Math.hypot(h1[4].x - h2[4].x, h1[4].y - h2[4].y);
-                    if (distIndex < 0.15 && distThumb < 0.15) {
-                        state = 'HEART'; return;
+                    
+                    // Adjust threshold for mobile
+                    const mobileThreshold = isMobile ? 0.2 : 0.15;
+                    
+                    if (distIndex < mobileThreshold && distThumb < mobileThreshold) {
+                        state = 'HEART';
+                        return;
                     }
                 }
 
-                if(results.multiHandLandmarks.length > 0) {
+                if (results.multiHandLandmarks.length > 0) {
                     const lm = results.multiHandLandmarks[0];
-                    handX = lm[9].x; 
-                    const tips = [8,12,16,20]; const wrist = lm[0];
-                    let openDist = 0; tips.forEach(i => openDist += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
+                    handX = lm[9].x; // Use wrist as reference
+                    
+                    // Calculate hand openness
+                    const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+                    const wrist = lm[0];
+                    let openDist = 0;
+                    
+                    tips.forEach(i => {
+                        openDist += Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y);
+                    });
+                    
                     const avgDist = openDist / 4;
-                    const pinchDist = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+                    const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+                    
+                    // Adjust thresholds for mobile
+                    const fistThreshold = isMobile ? 0.3 : 0.25;
+                    const pinchThreshold = isMobile ? 0.08 : 0.05;
 
-                    if (avgDist < 0.25) { 
+                    if (avgDist < fistThreshold) { 
+                        // Fist - TREE
                         state = 'TREE'; 
-                    } else if (pinchDist < 0.05) {
+                    } else if (pinchDist < pinchThreshold) {
+                        // Pinch - PHOTO
                         state = 'PHOTO'; 
                     } else {
+                        // Open hand - EXPLODE
                         state = 'EXPLODE'; 
                     }
                 } else {
+                    // No hand detected - default to TREE
                     state = 'TREE'; 
                 }
             });
 
-            const cameraUtils = new Camera(video, {
-                onFrame: async () => { await hands.send({image: video}); }, width: 320, height: 240
+            // Start camera feed for hand tracking
+            cameraUtils = new Camera(video, {
+                onFrame: async () => {
+                    if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                        await hands.send({image: video});
+                    }
+                },
+                width: 320,
+                height: 240
             });
             cameraUtils.start();
         }
 
+        function startSystem() {
+            document.getElementById('btnStart').style.display = 'none';
+            
+            // Try to play music
+            bgMusic.play().catch(e => {
+                console.log("Audio autoplay blocked:", e);
+                // On mobile, we need user interaction for audio
+                document.addEventListener('touchstart', function initAudio() {
+                    bgMusic.play().catch(e => console.log(e));
+                    document.removeEventListener('touchstart', initAudio);
+                }, { once: true });
+            });
+            
+            init3D();
+            
+            // Show camera permission dialog on mobile
+            if (isMobile) {
+                document.getElementById('camera-permission').style.display = 'block';
+            } else {
+                // On desktop, start camera directly
+                const video = document.getElementsByClassName('input_video')[0];
+                navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: false 
+                }).then(stream => {
+                    video.srcObject = stream;
+                    video.play();
+                    initHandTracking();
+                }).catch(err => {
+                    console.error("Camera error:", err);
+                    // If camera fails, still allow interaction with default state
+                });
+            }
+        }
+
+        // Handle window resize
         window.addEventListener('resize', () => {
-            if(camera) { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+            if(camera) { 
+                camera.aspect = window.innerWidth/window.innerHeight; 
+                camera.updateProjectionMatrix(); 
+                renderer.setSize(window.innerWidth, window.innerHeight); 
+            }
+        });
+
+        // Handle orientation change on mobile
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                if(camera) { 
+                    camera.aspect = window.innerWidth/window.innerHeight; 
+                    camera.updateProjectionMatrix(); 
+                    renderer.setSize(window.innerWidth, window.innerHeight); 
+                }
+            }, 300);
+        });
+
+        // Prevent default touch behaviors
+        document.addEventListener('touchmove', (e) => {
+            if (e.target.tagName !== 'BUTTON') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (cameraUtils) {
+                cameraUtils.stop();
+            }
+            if (hands) {
+                hands.close();
+            }
         });
     </script>
 </body>

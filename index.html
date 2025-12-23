@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Christmas - SAYGEX</title>
+    <title>Magic Christmas - Final Clean</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -61,46 +61,10 @@
         }
 
         #error-log { display: none; position: absolute; top: 0; left: 0; color: red; background: rgba(0,0,0,0.8); z-index: 999; padding: 10px; }
-        
-        /* Mobile Controls Vandiep */
-        #mobile-controls {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 12px;
-            background: rgba(0,0,0,0.5);
-            padding: 10px;
-            border-radius: 10px;
-            display: none;
-            pointer-events: none;
-        }
-        
-        .mobile-btn {
-            pointer-events: auto;
-            background: rgba(255, 215, 0, 0.8);
-            color: black;
-            border: none;
-            padding: 10px 15px;
-            margin: 5px;
-            border-radius: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            display: inline-block;
-        }
     </style>
 </head>
 <body>
     <div id="error-log"></div>
-    
-    <!-- Mobile Controls Vandiep -->
-    <div id="mobile-controls">
-        <div>Mobile Mode: Tap & Swipe</div>
-        <button class="mobile-btn" onclick="setMobileState('TREE')">🌲 Tree</button>
-        <button class="mobile-btn" onclick="setMobileState('EXPLODE')">✨ Explode</button>
-        <button class="mobile-btn" onclick="setMobileState('HEART')">❤️ Heart</button>
-        <button class="mobile-btn" onclick="setMobileState('PHOTO')">📸 Photo</button>
-    </div>
     
     <!-- UI Vandiep -->
     <div id="ui-layer">
@@ -187,179 +151,9 @@
         let state = 'TREE'; 
         let selectedIndex = 0;
         let handX = 0.5;
-        
-        // Mobile variables Vandiep
-        let isMobile = false;
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let touchEndX = 0;
-        let touchEndY = 0;
-        let lastTapTime = 0;
-        let tapCount = 0;
 
         // ==========================================
-        // 3. MOBILE HANDLING FUNCTIONS Vandiep
-        // ==========================================
-        function detectMobile() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
-
-        function initMobileControls() {
-            isMobile = detectMobile();
-            if (isMobile) {
-                document.getElementById('mobile-controls').style.display = 'block';
-                setupTouchEvents();
-            }
-        }
-
-        function setupTouchEvents() {
-            const container = document.getElementById('canvas-container');
-            
-            container.addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                const touch = e.touches[0];
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-                
-                // Double tap detection Vandiep
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTapTime;
-                if (tapLength < 300 && tapLength > 0) {
-                    tapCount++;
-                    if (tapCount === 2) {
-                        // Double tap: Toggle between EXPLODE and TREE
-                        state = (state === 'EXPLODE') ? 'TREE' : 'EXPLODE';
-                        tapCount = 0;
-                    }
-                } else {
-                    tapCount = 1;
-                }
-                lastTapTime = currentTime;
-            }, { passive: false });
-
-            container.addEventListener('touchmove', function(e) {
-                e.preventDefault();
-                if (!e.touches[0]) return;
-                
-                const touch = e.touches[0];
-                touchEndX = touch.clientX;
-                touchEndY = touch.clientY;
-                
-                // Swipe detection Vandiep
-                const diffX = touchEndX - touchStartX;
-                const diffY = touchEndY - touchStartY;
-                
-                if (Math.abs(diffX) > Math.abs(diffY)) {
-                    // Horizontal swipe - control rotation
-                    handX = touchEndX / window.innerWidth;
-                    
-                    if (Math.abs(diffX) > 50) {
-                        if (diffX > 0) {
-                            // Swipe right - next photo in EXPLODE mode
-                            if (state === 'EXPLODE') {
-                                selectedIndex = (selectedIndex + 1) % 5;
-                            }
-                        } else {
-                            // Swipe left - previous photo
-                            if (state === 'EXPLODE') {
-                                selectedIndex = (selectedIndex - 1 + 5) % 5;
-                            }
-                        }
-                        touchStartX = touchEndX;
-                    }
-                } else {
-                    // Vertical swipe - change states Vandiep
-                    if (Math.abs(diffY) > 50) {
-                        if (diffY > 0) {
-                            // Swipe down - go to TREE
-                            state = 'TREE';
-                        } else {
-                            // Swipe up - go to EXPLODE
-                            state = 'EXPLODE';
-                        }
-                        touchStartY = touchEndY;
-                    }
-                }
-            }, { passive: false });
-
-            container.addEventListener('touchend', function(e) {
-                e.preventDefault();
-                const diffX = Math.abs(touchEndX - touchStartX);
-                const diffY = Math.abs(touchEndY - touchStartY);
-                
-                // Tap detection (if not a swipe) Vandiep
-                if (diffX < 10 && diffY < 10) {
-                    if (tapCount === 1) {
-                        // Single tap - cycle through states
-                        const states = ['TREE', 'EXPLODE', 'HEART', 'PHOTO'];
-                        const currentIndex = states.indexOf(state);
-                        state = states[(currentIndex + 1) % states.length];
-                    }
-                }
-                
-                // Reset for pinch/zoom detection Vandiep
-                if (e.touches.length === 2) {
-                    // Two finger pinch - HEART gesture
-                    state = 'HEART';
-                }
-            }, { passive: false });
-
-            // Pinch/zoom detection Vandiep
-            let initialDistance = 0;
-            
-            container.addEventListener('touchmove', function(e) {
-                if (e.touches.length === 2) {
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-                    
-                    const distance = Math.sqrt(
-                        Math.pow(touch2.clientX - touch1.clientX, 2) +
-                        Math.pow(touch2.clientY - touch1.clientY, 2)
-                    );
-                    
-                    if (initialDistance === 0) {
-                        initialDistance = distance;
-                    }
-                    
-                    // If fingers come together
-                    if (distance < initialDistance - 20) {
-                        state = 'HEART';
-                    }
-                }
-            }, { passive: false });
-
-            container.addEventListener('touchend', function(e) {
-                if (e.touches.length < 2) {
-                    initialDistance = 0;
-                }
-            }, { passive: false });
-        }
-
-        function setMobileState(newState) {
-            state = newState;
-            
-            // Visual feedback Vandiep
-            const buttons = document.querySelectorAll('.mobile-btn');
-            buttons.forEach(btn => {
-                btn.style.background = 'rgba(255, 215, 0, 0.8)';
-            });
-            
-            // Highlight active button
-            const activeBtn = Array.from(buttons).find(btn => 
-                btn.textContent.includes(
-                    newState === 'TREE' ? 'Tree' :
-                    newState === 'EXPLODE' ? 'Explode' :
-                    newState === 'HEART' ? 'Heart' : 'Photo'
-                )
-            );
-            if (activeBtn) {
-                activeBtn.style.background = 'rgba(255, 0, 0, 0.8)';
-                activeBtn.style.color = 'white';
-            }
-        }
-
-        // ==========================================
-        // 4. THREE.JS SYSTEM Vandiep
+        // 3. THREE.JS SYSTEM Vandiep
         // ==========================================
         function init3D() {
             const container = document.getElementById('canvas-container');
@@ -380,10 +174,6 @@
 
             createPhotos();
             createDecorations();
-            
-            // Initialize mobile controls Vandiep
-            initMobileControls();
-            
             animate();
         }
 
@@ -532,7 +322,7 @@
             lCtx.font = 'bold 120px "Segoe UI", sans-serif';
             lCtx.fillStyle = '#FF69B4'; lCtx.textAlign = 'center';
             lCtx.shadowColor = "#FF1493"; lCtx.shadowBlur = 40; 
-            lCtx.fillText("DarknessGod", 512, 130);
+            lCtx.fillText("I LOVE YOU ❤️", 512, 130);
             const loveTex = new THREE.CanvasTexture(loveCanvas);
             const loveMat = new THREE.MeshBasicMaterial({ map: loveTex, transparent: true, blending: THREE.AdditiveBlending });
             loveMesh = new THREE.Mesh(new THREE.PlaneGeometry(70, 18), loveMat);
@@ -688,56 +478,50 @@
             bgMusic.play().catch(e => console.log(e));
             init3D();
 
-            // Only start camera if not on mobile (to save resources) Vandiep
-            if (!isMobile) {
-                const video = document.getElementsByClassName('input_video')[0];
-                const canvas = document.getElementById('camera-preview');
-                const ctx = canvas.getContext('2d');
-                
-                const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-                hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            const video = document.getElementsByClassName('input_video')[0];
+            const canvas = document.getElementById('camera-preview');
+            const ctx = canvas.getContext('2d');
+            
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
-                hands.onResults(results => {
-                    ctx.clearRect(0,0,100,75); ctx.drawImage(results.image, 0, 0, 100, 75);
+            hands.onResults(results => {
+                ctx.clearRect(0,0,100,75); ctx.drawImage(results.image, 0, 0, 100, 75);
 
-                    // --- Hand Logic  ---
-                    if (results.multiHandLandmarks.length === 2) {
-                        const h1 = results.multiHandLandmarks[0]; const h2 = results.multiHandLandmarks[1];
-                        const distIndex = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
-                        const distThumb = Math.hypot(h1[4].x - h2[4].x, h1[4].y - h2[4].y);
-                        if (distIndex < 0.15 && distThumb < 0.15) {
-                            state = 'HEART'; return;
-                        }
+                // --- Hand Logic  ---
+                if (results.multiHandLandmarks.length === 2) {
+                    const h1 = results.multiHandLandmarks[0]; const h2 = results.multiHandLandmarks[1];
+                    const distIndex = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
+                    const distThumb = Math.hypot(h1[4].x - h2[4].x, h1[4].y - h2[4].y);
+                    if (distIndex < 0.15 && distThumb < 0.15) {
+                        state = 'HEART'; return;
                     }
+                }
 
-                    if(results.multiHandLandmarks.length > 0) {
-                        const lm = results.multiHandLandmarks[0];
-                        handX = lm[9].x; 
-                        const tips = [8,12,16,20]; const wrist = lm[0];
-                        let openDist = 0; tips.forEach(i => openDist += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
-                        const avgDist = openDist / 4;
-                        const pinchDist = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+                if(results.multiHandLandmarks.length > 0) {
+                    const lm = results.multiHandLandmarks[0];
+                    handX = lm[9].x; 
+                    const tips = [8,12,16,20]; const wrist = lm[0];
+                    let openDist = 0; tips.forEach(i => openDist += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
+                    const avgDist = openDist / 4;
+                    const pinchDist = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
 
-                        if (avgDist < 0.25) { 
-                            state = 'TREE'; 
-                        } else if (pinchDist < 0.05) {
-                            state = 'PHOTO'; 
-                        } else {
-                            state = 'EXPLODE'; 
-                        }
-                    } else {
+                    if (avgDist < 0.25) { 
                         state = 'TREE'; 
+                    } else if (pinchDist < 0.05) {
+                        state = 'PHOTO'; 
+                    } else {
+                        state = 'EXPLODE'; 
                     }
-                });
+                } else {
+                    state = 'TREE'; 
+                }
+            });
 
-                const cameraUtils = new Camera(video, {
-                    onFrame: async () => { await hands.send({image: video}); }, width: 320, height: 240
-                });
-                cameraUtils.start();
-            } else {
-                // Hide camera preview on mobile Vandiep
-                document.getElementById('camera-preview').style.display = 'none';
-            }
+            const cameraUtils = new Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); }, width: 320, height: 240
+            });
+            cameraUtils.start();
         }
 
         window.addEventListener('resize', () => {
